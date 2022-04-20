@@ -6,6 +6,8 @@ const ROTATION_X_START_VALUE = -20;
 const MENU_SHOWN_SCALE = 0.3;
 const CUBE_TOP_VALUE = 33;
 
+const MENU_CSS_CLASS = 'menu';
+
 interface CarouselNavigationParams {
     carousel?: string;
     page?: string;
@@ -14,10 +16,22 @@ interface CarouselNavigationParams {
     autoRotate?: boolean;
     dragCube?: true;
     bgParticles?: false;
+    menuItems?: [],
+    menuContainer?: HTMLElement
 }
 
-// type PositionString = string;
-// type PositionNumber = number;
+interface RotationRange {
+    from?: number,
+    to: number
+}
+
+
+type RotationDistance = RotationRange | number | null;
+
+interface AnimationOptions {
+    infinite?: boolean,
+    direction?: PlaybackDirection | undefined
+}
 
 interface PositionData {
     transform: {
@@ -84,6 +98,8 @@ export default class CarouselNavigation {
 
     private _cubeTouched = false;
 
+    private _menuContainer: HTMLElement | null = null;
+
     private _currentNaviPosition: PositionData = {
         transform: {
             scale: '',
@@ -109,6 +125,20 @@ export default class CarouselNavigation {
         this._dragCube = params.dragCube === undefined ? true : !!params.dragCube;
         this._mouseDownEvent = this._getDragEventHandler();
 
+        this._initialize(params);
+    }
+
+    private _initialize(params: CarouselNavigationParams = {}) {
+        this._menuButton.addEventListener('click', () => {
+            if (!this.isShown()) {
+                this.show();
+            } else {
+                this.hide();
+            }
+        });
+
+        this._buildMenu(params);
+        
         if (!!params.bgParticles) {
             import('./particlesjs-config.json').then(particlesConfig => {
                 // @ts-ignore
@@ -116,23 +146,74 @@ export default class CarouselNavigation {
                 .then(container => {
                         this._particlesContainer = document.getElementById('particles');
                         this._toggleParticlesVisibility();
-                        console.log("Particles loaded", container);
+                        // console.log("Particles loaded", container);
                     })
                     .catch(error => {
                         console.error(error);
                     });
             });
         }
-
-        this._initialize();
     }
 
-    private _initialize() {
-        this._menuButton.addEventListener('click', () => {
-            if (!this.isShown()) {
-                this.show();
-            } else {
-                this.hide();
+    private _buildMenu(params: CarouselNavigationParams = {}) {
+        let menuItems = '';
+        if (!params || !params.menuItems) {
+            return;
+        }
+
+        params.menuItems.forEach((menuItem, i) => {
+            menuItems += `
+                <li class="menuItem">
+                    <a href="javascript:;" data-click="${i}">
+                        ${menuItem}
+                    </a>
+                </li>
+            `;
+        });
+
+        if (params.menuContainer) {
+            this._menuContainer = params.menuContainer;
+        } else {
+            this._menuContainer = document.createElement('div');
+            this._menuContainer.classList.add(MENU_CSS_CLASS);
+        }
+        
+        this._menuContainer.innerHTML += `<ul>${menuItems}</ul>`;
+
+        const list = this._menuContainer.querySelector('ul')!;
+        list.addEventListener('click', (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (target && target.dataset) {
+                this.navigateToPage(parseInt(target.dataset.click!, 10));
+            }
+        });
+        
+        list.addEventListener('mouseover', (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (target && target.dataset) {
+                const index = parseInt(target.dataset.click!, 10);
+                if (isNaN(index)) {
+                    return;
+                }
+
+                const targetRotateY = 0 - index * this._angle;
+
+                if (this._animation) {
+                    this._stopAnimation();
+                }
+
+                this._animation = this._runRotation(200, {
+                    to: targetRotateY
+                });
+                this._animation.addEventListener('finish', () => {
+                    this._stopAnimation();
+                    this._setCurrentPosition({
+                        transform: {
+                            rotateY: '' + targetRotateY + 'deg',
+                        }
+                    });
+                    this._updateStyles();
+                });
             }
         });
     }
@@ -170,7 +251,9 @@ export default class CarouselNavigation {
             if (this._autoRotate) {
                 setTimeout(() => {
                     if (this.isShown() && !this._cubeTouched) {
-                        this._animation = this._runRotation(this);
+                        this._animation = this._runRotation(AUTO_ROTATION_DURATION, null, {
+                            direction: 'reverse'
+                        });
                     }
                 }, 1000);
             }
@@ -200,7 +283,7 @@ export default class CarouselNavigation {
         if (this._animation) {
             this._animation.pause();
             currentRotateY = getCurrentKeyframeValue(this._animation) % 360;
-            console.log(`Rotated ${currentRotateY}deg after ${this._animation.currentTime}ms`);
+            // console.log(`Rotated ${currentRotateY}deg after ${this._animation.currentTime}ms`);
             this._stopAnimation();
         // } else {
             // const offset = this._pageContainer.style.transform.match(/rotateY\(([0-9.]*)deg\)/);
@@ -309,39 +392,80 @@ export default class CarouselNavigation {
         this._stopAnimation();
     }
 
-    private _runRotation(carousel: CarouselNavigation) {
-        const transformStart = this._pageContainer.style.transform;
-        const regex = /rotateY\(([-]?(\d*\.)?\d+)deg\)/;
-        const currentVal = this._pageContainer.style.transform.match(regex);
-        if (!currentVal || currentVal[1] === undefined) {
-            return null;
-        }
-        
-        let transformEnd = this._pageContainer.style.transform.replace(regex, '');
-        transformEnd += ` rotateY(${parseInt(currentVal[1], 10) + 360}deg)`;
 
-        return carousel._pageContainer.animate(
-            [
-                {
-                    transform: transformStart
-                },
-                {
-                    transform: transformEnd,
-                },
-            ],
-            {
-                direction: 'reverse',
-                duration: AUTO_ROTATION_DURATION,
-                iterations: Infinity,
-            }
+    private _runRotation(duration: number, rotationRange: RotationDistance = null, animationOptions: AnimationOptions = {}) {
+        let rotationStartVal = 0, 
+            rotationEndVal = 0;
+
+        if (
+            !rotationRange || typeof rotationRange === 'number' || 
+            (typeof rotationRange === 'object' && typeof rotationRange.from !== 'number')
+        ) {
+            rotationStartVal = this._getValueFromStyle(this._currentNaviPosition.transform.rotateY!);
+        } else {
+            rotationStartVal = rotationRange.from!;
+        }
+
+
+        if (!rotationRange) {
+            rotationEndVal = rotationStartVal + 360;
+        } else if (typeof rotationRange === 'number') {
+            rotationEndVal = rotationStartVal + rotationRange;
+        } else {
+            rotationEndVal = rotationRange.to;
+        }
+
+        const options: KeyframeAnimationOptions = {
+            duration: duration
+        };
+
+        if (animationOptions.infinite) {
+            options.iterations = Infinity;
+        }
+
+        if (animationOptions.direction) {
+            options.direction = animationOptions.direction;
+        }
+
+        const transformStart = {
+            transform: {
+                scale: this._currentNaviPosition.transform.scale,
+                rotateX: this._currentNaviPosition.transform.rotateX,
+                rotateY: rotationStartVal + 'deg'
+            },
+            top: this._currentNaviPosition.top
+        };
+
+        const transformEnd = {
+            transform: {
+                scale: this._currentNaviPosition.transform.scale,
+                rotateX: this._currentNaviPosition.transform.rotateX,
+                rotateY: rotationEndVal + 'deg'
+            },
+            top: this._currentNaviPosition.top
+        };
+        
+
+        const keyframes = [
+            this._toKeyframes(transformStart),
+            this._toKeyframes(transformEnd)
+        ];
+        
+
+        // console.log('start', this._toKeyframes(transformStart));
+        // console.log('end', this._toKeyframes(transformEnd));
+        
+        return this._pageContainer.animate(
+            keyframes,
+            options
         );
     }
 
     private _getDragEventHandler() {
         return (event: MouseEvent) => {
             const startX = event.pageX, startY = event.pageY;
-            const offsetX = this._getNumberFromStyle(this._currentNaviPosition.transform.rotateX!);
-            const offsetY = this._getNumberFromStyle(this._currentNaviPosition.transform.rotateY!);
+            const offsetX = this._getValueFromStyle(this._currentNaviPosition.transform.rotateX!);
+            const offsetY = this._getValueFromStyle(this._currentNaviPosition.transform.rotateY!);
 
             this._cubeTouched = true;
 
@@ -374,7 +498,6 @@ export default class CarouselNavigation {
             const onMouseMove = (event: MouseEvent) => {
                 if (!this._dom.contains(event.target as Node)) {
                     removeMouseMoveEvent();
-                    console.log('event', event, event.target);
                 }
                 moveAt(event.pageX, event.pageY);
             };
@@ -397,7 +520,7 @@ export default class CarouselNavigation {
         };
     }
 
-    private _getNumberFromStyle(style: string): number {
+    private _getValueFromStyle(style: string): number {
         return parseFloat(style);
     }
 
@@ -418,7 +541,6 @@ export default class CarouselNavigation {
     private _updateStyles() {
         let styleTag = '';
 
-        console.log('this._currentNaviPosition', this._currentNaviPosition);
         Object.keys(this._currentNaviPosition).forEach((val) => {
             const cssAttr = val as keyof PositionData;
             const subStyles = <any>this._currentNaviPosition[cssAttr];

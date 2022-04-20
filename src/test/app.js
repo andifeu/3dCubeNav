@@ -9,5 +9,14 @@ document.querySelectorAll('header').forEach((header, i) => {
 new CarouselNavigation({
     autoRotate: true,
     bgParticles: true,
-    dragCube: true
+    dragCube: true,
+    menuItems: [
+        'HOME',
+        'SERVICES',
+        'PORTFOLIO',
+        'TESTIMONIALS',
+        'ABOUT',
+        'CONTACT',
+    ],
+    menuContainer: document.querySelector('.menu')
 });
