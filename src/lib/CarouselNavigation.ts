@@ -5,6 +5,7 @@ const TOGGLE_MENU_DURATION = 500;
 const ROTATION_X_START_VALUE = -20;
 const MENU_SHOWN_SCALE = 0.3;
 const CUBE_TOP_VALUE = 33;
+const PERSPECTIVE = 1000;
 
 const MENU_CSS_CLASS = 'menu';
 
@@ -14,7 +15,7 @@ interface CarouselNavigationParams {
     activePageIndex?: number;
     menuButton?: string;
     autoRotate?: boolean;
-    dragCube?: true;
+    draggable?: true;
     bgParticles?: false;
     menuItems?: [],
     menuContainer?: HTMLElement
@@ -35,8 +36,10 @@ interface AnimationOptions {
 
 interface PositionData {
     transform: {
+        // unit: vw
+        perspective?: string
         scale?: string;
-        // value and unit
+        // unit: vw
         translateZ?: string;
         // unit: degrees
         rotateX?: string;
@@ -51,25 +54,9 @@ type Keyframe = {
     [key: string]: string;
 };
 
-// type ObjectKeys<T> =
-//   T extends object ? (keyof T)[] :
-//   T extends number ? [] :
-//   T extends Array<any> | string ? string[] :
-//   never;
-
-// interface ObjectConstructor {
-//     keys<T>(o: T): ObjectKeys<T>
-// }
-
-// const defaultParams: CarouselNavigationParams = {
-//     carousel: '.carousel',
-//     page: '.page',
-//     activePageIndex: 0,
-//     menuButton: '.btn-menu',
-//     autoRotate: true
-// }
 
 export default class CarouselNavigation {
+
     private _dom: HTMLDivElement;
 
     private _pageContainer: HTMLDivElement;
@@ -92,7 +79,7 @@ export default class CarouselNavigation {
 
     private _shown: boolean = false;
 
-    private _dragCube: boolean = true;
+    private _draggable: boolean = true;
 
     private _particlesContainer: HTMLElement | null = null;
 
@@ -100,8 +87,11 @@ export default class CarouselNavigation {
 
     private _menuContainer: HTMLElement | null = null;
 
+    private _showParticles: boolean = true;
+
     private _currentNaviPosition: PositionData = {
         transform: {
+            perspective: '',
             scale: '',
             translateZ: '',
             rotateX: '',
@@ -122,7 +112,8 @@ export default class CarouselNavigation {
         this._angle = 360 / this._numPages;
         this._menuButton = getElemenBySelector(params.menuButton || '.btn-menu', true);
         this._autoRotate = params.autoRotate !== undefined ? params.autoRotate : true;
-        this._dragCube = params.dragCube === undefined ? true : !!params.dragCube;
+        this._draggable = params.draggable === undefined ? true : !!params.draggable;
+        this._showParticles = params.bgParticles === false ? false : true; 
         this._mouseDownEvent = this._getDragEventHandler();
 
         this._initialize(params);
@@ -139,7 +130,7 @@ export default class CarouselNavigation {
 
         this._buildMenu(params);
         
-        if (!!params.bgParticles) {
+        if (this._showParticles) {
             import('./particlesjs-config.json').then(particlesConfig => {
                 // @ts-ignore
                 tsParticles.loadJSON('particles', particlesConfig.default)
@@ -234,10 +225,18 @@ export default class CarouselNavigation {
         }
     }
 
+    /**
+     * Determines if the menu is currently shown
+     * 
+     * @returns The display status of the menu (true=shown/false=hidden)
+     */
     public isShown() {
         return this._shown;
     }
 
+    /**
+     * Displays the navigation cube
+     */
     public show() {
         this._toggleParticlesVisibility(true);
         toggleMenuClass(this._dom.parentNode);
@@ -258,17 +257,26 @@ export default class CarouselNavigation {
                 }, 1000);
             }
 
-            if (this._dragCube) {
+            if (this._draggable) {
+                this._pageContainer.classList.add('draggable');
                 this._pageContainer.addEventListener('mousedown', this._mouseDownEvent);
             }
         });
     }
 
+    /**
+     * Hides the navigation cube
+     */
     public hide() {
         this._stopRotation();
         this.navigateToPage();
     }
 
+    /**
+     * Navigates to a given page
+     * 
+     * @param pageIndex Index of page which should be displayed
+     */
     public navigateToPage(pageIndex: number = this._activePageIndex) {
         let pageIndexChanged = false,
             currentRotateY = this._getTargetAngle(this._activePageIndex);
@@ -313,10 +321,14 @@ export default class CarouselNavigation {
 
             this._toggleParticlesVisibility();
         });
+
+        this._pageContainer.classList.remove('draggable');
     }
 
     private _toggleParticlesVisibility(visible = false) {
-        this._particlesContainer!.style.display = visible ? '' : 'none';
+        if (this._showParticles) {
+            this._particlesContainer!.style.display = visible ? '' : 'none';
+        }
     }
 
     private _getTargetAngle(pageIndex: number) {
@@ -339,7 +351,8 @@ export default class CarouselNavigation {
 
     private _rotateToPage(pageIndex: number) {
         const angleOfPage = this._angle * pageIndex * -1;
-        this._pageContainer.style.transform = `translateZ(-${this._radius}vw) rotateY(${angleOfPage}deg))`;
+        // this._pageContainer.style.transform = `translateZ(-${this._radius}vw) rotateY(${angleOfPage}deg))`;
+        this._pageContainer.style.transform = `rotateY(${angleOfPage}deg))`;
     }
 
     private _forEachPage(functionToCall: (page: HTMLElement, index: number) => void) {
@@ -427,8 +440,10 @@ export default class CarouselNavigation {
             options.direction = animationOptions.direction;
         }
 
-        const transformStart = {
+        const transformStart:PositionData = {
             transform: {
+                // perspective: this._currentNaviPosition.transform.perspective,
+                // translateZ: this._currentNaviPosition.transform.translateZ,
                 scale: this._currentNaviPosition.transform.scale,
                 rotateX: this._currentNaviPosition.transform.rotateX,
                 rotateY: rotationStartVal + 'deg'
@@ -436,8 +451,10 @@ export default class CarouselNavigation {
             top: this._currentNaviPosition.top
         };
 
-        const transformEnd = {
+        const transformEnd:PositionData = {
             transform: {
+                // perspective: this._currentNaviPosition.transform.perspective,
+                // translateZ: this._currentNaviPosition.transform.translateZ,
                 scale: this._currentNaviPosition.transform.scale,
                 rotateX: this._currentNaviPosition.transform.rotateX,
                 rotateY: rotationEndVal + 'deg'
@@ -585,12 +602,6 @@ export default class CarouselNavigation {
         return keyframe;
     }
 
-    // private _getInlineStyles(attribute: string): string {
-    //     if (this._currentKeyframes && this._currentKeyframes[attribute]) {
-    //         return this._currentKeyframes[attribute];
-    //     }
-    //     return '';
-    // }
 
     private _menuVisibilityAnimation(showMenu = true) {
         const keyframes = [];
@@ -602,8 +613,9 @@ export default class CarouselNavigation {
         if (showMenu) {
             targetPosition = {
                 transform: {
+                    // perspective: `${PERSPECTIVE}vw`,
                     scale: `${MENU_SHOWN_SCALE}`,
-                    translateZ: `-${this._radius}vw`,
+                    // translateZ: `-${this._radius}vw`,
                     rotateX: `${ROTATION_X_START_VALUE}deg`,
                     rotateY: currentRotateY + 'deg'
                 },

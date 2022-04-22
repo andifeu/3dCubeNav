@@ -9,7 +9,7 @@ document.querySelectorAll('header').forEach((header, i) => {
 new CarouselNavigation({
     autoRotate: true,
     bgParticles: true,
-    dragCube: true,
+    draggable: false,
     menuItems: [
         'HOME',
         'SERVICES',

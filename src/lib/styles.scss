@@ -136,8 +136,7 @@ header {
     .carousel {
         position: relative;
         z-index: 10;
-
-        // perspective: 300vw;
+        perspective: 1000vw;
     }
 }
 
@@ -156,6 +155,9 @@ header {
             position: relative;
             transform-style: preserve-3d;
             user-select: none;
+        }
+
+        .page-container.draggable {
             cursor: grab;
         }
 
@@ -209,7 +211,6 @@ header {
         transform: translateY(10px);
 
         &:hover {
-            // color: #fff;
             color: #3f7e9b
         }
     }
