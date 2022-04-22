@@ -9,6 +9,7 @@ module.exports = (env, argv) => {
     const mode = argv.mode;
     const isDevelopment = mode !== 'production';
     const loader = isDevelopment ? 'style-loader' : MiniCssExtractPlugin.loader;
+    const sourceMaps = isDevelopment ? 'source-map' : false;
 
     return {
         mode: mode,
@@ -18,14 +19,14 @@ module.exports = (env, argv) => {
         },
         output: {
             path: path.resolve(__dirname, 'dist'),
-            filename: '[name].[contenthash].js',
+            filename: 'js/[name].[contenthash].js',
             clean: true,
             assetModuleFilename: 'assets/[hash][ext]'
         },
         resolve: {
-            extensions: ['.ts', '.js'],
+            extensions: ['.ts', '.js']
         },
-        devtool: 'source-map',
+        devtool: sourceMaps,
         devServer: {
             static: {
                 directory: basePath + '/dist',
