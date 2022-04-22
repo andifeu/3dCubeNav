@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_3dCubeNav=self.webpackChunk_3dCubeNav||[]).push([[728],{728:(e,s,a)=>{e.exports=a.p+"assets/39ea682a40e827ecf072.jpg"}}]);
